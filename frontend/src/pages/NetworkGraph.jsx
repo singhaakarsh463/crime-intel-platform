@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import * as d3 from "d3";
-import { fetchNetworkGraph } from "../lib/api.js";
+import { fetchNetworkGraph, fetchNetworkGroups } from "../lib/api.js";
 
 const SEVERITY_COLOR = {
   low: "#3FD6C1",
@@ -15,6 +15,8 @@ export default function NetworkGraph() {
   const containerRef = useRef(null);
   const navigate = useNavigate();
   const [graph, setGraph] = useState({ nodes: [], edges: [], recurring_links: 0 });
+  const [groups, setGroups] = useState([]);
+  const [selectedGroup, setSelectedGroup] = useState(null);
   const [error, setError] = useState("");
   const [selected, setSelected] = useState(null);
 
@@ -22,6 +24,9 @@ export default function NetworkGraph() {
     fetchNetworkGraph()
       .then(setGraph)
       .catch(() => setError("Could not load the network graph. Is the API running?"));
+    fetchNetworkGroups()
+      .then(setGroups)
+      .catch(() => setGroups([]));
   }, []);
 
   useEffect(() => {
@@ -58,66 +63,50 @@ export default function NetworkGraph() {
       .append("g")
       .selectAll("line")
       .data(links)
-      .join("line")
-      .attr("stroke", (d) => (d.kind === "shared_phone" ? "#E23D5B" : "#232E42"))
-      .attr("stroke-width", (d) => (d.kind === "shared_phone" ? 2 : 1))
+      .enter()
+      .append("line")
+      .attr("stroke", (d) => (d.kind === "shared_phone" ? "#E23D5B" : d.kind === "financial_transfer" ? "#F0A202" : "#243242"))
       .attr("stroke-dasharray", (d) => (d.kind === "shared_phone" ? "4,3" : "none"))
-      .attr("opacity", 0.8);
+      .attr("stroke-width", (d) => (d.kind === "shared_phone" ? 2 : d.kind === "financial_transfer" ? 2.5 : 1));
 
-    const node = g
+    const nodeGroup = g
       .append("g")
       .selectAll("g")
       .data(nodes)
-      .join("g")
+      .enter()
+      .append("g")
       .style("cursor", "pointer")
-      .call(
-        d3
-          .drag()
-          .on("start", (event, d) => {
-            if (!event.active) simulation.alphaTarget(0.3).restart();
-            d.fx = d.x;
-            d.fy = d.y;
-          })
-          .on("drag", (event, d) => {
-            d.fx = event.x;
-            d.fy = event.y;
-          })
-          .on("end", (event, d) => {
-            if (!event.active) simulation.alphaTarget(0);
-            d.fx = null;
-            d.fy = null;
-          })
-      )
-      .on("click", (_, d) => setSelected(d));
+      .on("click", (event, d) => {
+        event.stopPropagation();
+        if (d.type === "case") navigate(`/cases/${d.ref_id}`);
+        else setSelected(d);
+      });
 
-    node
-      .filter((d) => d.type === "case")
-      .append("rect")
-      .attr("x", -8)
-      .attr("y", -8)
-      .attr("width", 16)
-      .attr("height", 16)
-      .attr("rx", 3)
-      .attr("fill", (d) => SEVERITY_COLOR[d.severity] || "#7C8AA3")
-      .attr("stroke", "#0B0F17")
-      .attr("stroke-width", 1.5);
+    // Check if node belongs to selectedGroup
+    const selectedGroupMemberIds = selectedGroup
+      ? new Set(selectedGroup.members.map((m) => m.person_node_id))
+      : null;
 
-    node
-      .filter((d) => d.type === "person")
+    nodeGroup
       .append("circle")
-      .attr("r", 6)
-      .attr("fill", "#F0A202")
-      .attr("stroke", "#0B0F17")
-      .attr("stroke-width", 1.5);
+      .attr("r", (d) => (d.type === "case" ? 14 : d.type === "account" ? 10 : 8))
+      .attr("fill", (d) => {
+        if (selectedGroupMemberIds && selectedGroupMemberIds.has(d.id)) return "#F0A202";
+        if (d.type === "case") return SEVERITY_COLOR[d.severity] || "#3FD6C1";
+        if (d.type === "account") return "#3FD6C1";
+        return "#5B6B7C";
+      })
+      .attr("stroke", (d) => (selectedGroupMemberIds && selectedGroupMemberIds.has(d.id) ? "#E23D5B" : "#0F172A"))
+      .attr("stroke-width", (d) => (selectedGroupMemberIds && selectedGroupMemberIds.has(d.id) ? 3 : 2));
 
-    node
+    nodeGroup
       .append("text")
       .text((d) => d.label)
       .attr("x", 12)
       .attr("y", 4)
-      .attr("font-size", 10)
-      .attr("font-family", "JetBrains Mono, monospace")
-      .attr("fill", "#7C8AA3");
+      .attr("fill", "#F1F5F9")
+      .attr("font-size", "10px")
+      .attr("font-family", "monospace");
 
     simulation.on("tick", () => {
       link
@@ -125,67 +114,94 @@ export default function NetworkGraph() {
         .attr("y1", (d) => d.source.y)
         .attr("x2", (d) => d.target.x)
         .attr("y2", (d) => d.target.y);
-      node.attr("transform", (d) => `translate(${d.x},${d.y})`);
+
+      nodeGroup.attr("transform", (d) => `translate(${d.x},${d.y})`);
     });
 
     return () => simulation.stop();
-  }, [graph]);
+  }, [graph, selectedGroup, navigate]);
 
   return (
-    <div className="p-8 h-screen flex flex-col">
-      <div className="mb-4 flex items-start justify-between flex-wrap gap-3">
-        <div>
-          <p className="font-mono text-teal text-xs tracking-[0.3em] mb-1">RELATIONSHIPS</p>
-          <h2 className="font-display text-3xl text-ink">Case &amp; Suspect Network</h2>
+    <div className="flex h-screen bg-bg text-ink">
+      <div className="flex-1 relative flex flex-col">
+        <div className="p-4 border-b border-line flex items-center justify-between bg-panel">
+          <div>
+            <h2 className="font-display text-xl">Criminal & Financial Network Graph</h2>
+            <p className="text-muted text-xs font-mono">
+              Dashed red edges = shared phone number across cases &middot; Yellow edges = financial transfers
+            </p>
+          </div>
+          <div className="flex items-center gap-4 text-xs font-mono">
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-teal" /> Case
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#5B6B7C]" /> Person
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber" /> Flagged Gang Member
+            </span>
+          </div>
         </div>
-        <div className="flex items-center gap-4 text-xs font-mono text-muted">
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-sm bg-teal inline-block" /> Case
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-3 h-3 rounded-full bg-amber inline-block" /> Person
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-4 border-t-2 border-crit border-dashed inline-block" /> Shared phone number
-            ({graph.recurring_links})
-          </div>
+
+        <div ref={containerRef} className="flex-1 w-full relative overflow-hidden bg-bg">
+          {error && (
+            <div className="absolute top-4 left-4 z-10 text-crit text-xs font-mono bg-crit/10 border border-crit/40 px-3 py-2 rounded">
+              {error}
+            </div>
+          )}
+          <svg ref={svgRef} className="w-full h-full" />
         </div>
       </div>
 
-      {error && (
-        <p className="text-crit text-sm font-mono border border-crit/40 bg-crit/10 rounded px-4 py-3 mb-4">
-          {error}
-        </p>
-      )}
+      {/* Sidebar Panel for Gang Groups & Node Details */}
+      <div className="w-80 border-l border-line bg-panel p-4 flex flex-col space-y-6 overflow-y-auto">
+        <div>
+          <h3 className="font-display text-lg mb-1">Detected Syndicates ({groups.length})</h3>
+          <p className="text-muted text-[11px] font-mono mb-3">
+            Connected clusters sharing multiple link vectors
+          </p>
 
-      <div className="flex-1 flex gap-4 min-h-0">
-        <div ref={containerRef} className="flex-1 border border-line rounded-md overflow-hidden bg-panel">
-          <svg ref={svgRef} width="100%" height="100%" />
+          {groups.length === 0 ? (
+            <p className="text-muted text-xs font-mono">No qualifying gang clusters detected.</p>
+          ) : (
+            <div className="space-y-2">
+              {groups.map((g) => (
+                <div
+                  key={g.group_id}
+                  onClick={() => setSelectedGroup(selectedGroup?.group_id === g.group_id ? null : g)}
+                  className={`border rounded p-3 text-xs font-mono cursor-pointer transition ${
+                    selectedGroup?.group_id === g.group_id
+                      ? "bg-amber/10 border-amber text-amber"
+                      : "bg-panel2 border-line text-ink hover:border-teal"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-semibold">{g.name}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-crit/10 text-crit border border-crit/40 text-[10px]">
+                      Risk: {g.group_risk_score}
+                    </span>
+                  </div>
+                  <p className="text-muted text-[11px]">
+                    Members: {g.member_count} &middot; Cases: {g.linked_cases}
+                  </p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {selected && (
-          <div className="w-72 bg-panel border border-line rounded-md p-4 shrink-0">
-            <p className="font-mono text-xs text-muted uppercase mb-1">{selected.type}</p>
-            <p className="text-ink font-display text-xl mb-1">{selected.label}</p>
-            <p className="text-muted text-sm mb-3">{selected.sublabel}</p>
-            {selected.phone && (
-              <p className="text-xs font-mono text-teal mb-3">{selected.phone}</p>
-            )}
-            {selected.district && (
-              <p className="text-xs text-muted mb-3">District: {selected.district}</p>
-            )}
-            <button
-              onClick={() => navigate(`/cases/${selected.ref_id}`)}
-              className="text-xs font-mono text-amber hover:underline"
-            >
-              View case →
-            </button>
+          <div className="border-t border-line pt-4">
+            <h4 className="font-display text-base text-teal mb-2">Node Details</h4>
+            <div className="bg-panel2 border border-line rounded p-3 text-xs font-mono space-y-1">
+              <p className="text-ink font-semibold">{selected.label}</p>
+              <p className="text-muted">{selected.sublabel}</p>
+              {selected.phone && <p className="text-teal">{selected.phone}</p>}
+            </div>
           </div>
         )}
       </div>
-      <p className="text-muted text-xs font-mono mt-2">
-        {graph.nodes.length} node(s), drag to reposition, scroll to zoom, click a node for details.
-      </p>
     </div>
   );
 }

@@ -6,6 +6,11 @@ import CaseDetail from "./pages/CaseDetail.jsx";
 import MapView from "./pages/MapView.jsx";
 import NetworkGraph from "./pages/NetworkGraph.jsx";
 import AuditTrail from "./pages/AuditTrail.jsx";
+import Admin from "./pages/Admin.jsx";
+import Import from "./pages/Import.jsx";
+import Offenders from "./pages/Offenders.jsx";
+import Insights from "./pages/Insights.jsx";
+import Assistant from "./pages/Assistant.jsx";
 import Layout from "./components/Layout.jsx";
 import { getCurrentUser } from "./lib/api.js";
 
@@ -30,7 +35,12 @@ export default function App() {
                 <Route path="/cases/:id" element={<CaseDetail />} />
                 <Route path="/map" element={<MapView />} />
                 <Route path="/network" element={<NetworkGraph />} />
+                <Route path="/assistant" element={<Assistant />} />
                 <Route path="/audit" element={<AuditTrail />} />
+                <Route path="/admin" element={<Admin />} />
+                <Route path="/import" element={<Import />} />
+                <Route path="/offenders" element={<Offenders />} />
+                <Route path="/insights" element={<Insights />} />
               </Routes>
             </Layout>
           </ProtectedRoute>

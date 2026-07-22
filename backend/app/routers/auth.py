@@ -1,15 +1,28 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 
 from app.database import get_db
 from app import models, schemas, auth
+from app.limiter import limiter, RATE_AUTH
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+# Roles that any user may self-assign during public signup.
+# Admin/analyst accounts must be created via the /api/admin/users endpoint.
+_SELF_REGISTER_ROLES = {models.RoleEnum.viewer, models.RoleEnum.investigator}
+
 
 @router.post("/signup", response_model=schemas.Token)
-def signup(payload: schemas.UserCreate, db: Session = Depends(get_db)):
+@limiter.limit(RATE_AUTH)
+def signup(request: Request, payload: schemas.UserCreate, db: Session = Depends(get_db)):
+    if payload.role not in _SELF_REGISTER_ROLES:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Self-registration is only allowed for 'viewer' and 'investigator' roles. "
+                   "Contact an administrator to create admin or analyst accounts.",
+        )
+
     existing = db.query(models.User).filter(models.User.email == payload.email).first()
     if existing:
         raise HTTPException(status_code=400, detail="An account with this email already exists")
@@ -29,7 +42,12 @@ def signup(payload: schemas.UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=schemas.Token)
-def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+@limiter.limit(RATE_AUTH)
+def login(
+    request: Request,
+    form_data: OAuth2PasswordRequestForm = Depends(),
+    db: Session = Depends(get_db),
+):
     user = db.query(models.User).filter(models.User.email == form_data.username).first()
     if not user or not auth.verify_password(form_data.password, user.hashed_password):
         raise HTTPException(

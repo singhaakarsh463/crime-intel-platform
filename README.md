@@ -1,106 +1,116 @@
-# Crime Intelligence Platform — Phase 1 through 5
+# Crime Intelligence Platform — Production & Complete 10-Pillar Build
 
-Full build through Phase 5: the original MVP plan (Login/Dashboard/Case DB, Charts/Map/Export,
-deep-search AI assistant, Network Graph/Similar Cases/Predictions) plus the additional Key
-Features requested afterward — bilingual voice chat, chat-transcript PDF export, and an
-explainable-AI audit trail.
+A complete, enterprise-grade law enforcement case management and AI intelligence platform aligned with the **official Karnataka State Police (KSP) FIR ER Diagram**, built with **FastAPI**, **SQLite/PostgreSQL**, **React**, **Tailwind CSS**, **D3.js**, and **Recharts**.
 
-## What's included
-- **Backend** (`/backend`): FastAPI + SQLAlchemy + JWT auth
-  - `users`, `cases`, `persons`, `evidence`, `chat_sessions`, `chat_messages`, `audit_logs` tables
-  - Role-based access (investigator / analyst / admin / viewer)
-  - Case search+filter+create, case detail (with linked persons/evidence), map data, dashboard
-    stats, PDF case-report export, a deep-search RAG chatbot, a case-relationship network graph,
-    similar-case suggestions, and predictive district-trend alerts
-  - SQLite by default (swap `DATABASE_URL` env var for Postgres later)
-- **Frontend** (`/frontend`): React + Vite + Tailwind
-  - Login page, protected routes
-  - Dashboard: case counts, crime-type/district charts, high-severity alerts, **predictive alerts**
-    (districts trending up over the last 30 days)
-  - Case Search → Case Detail (persons, evidence, PDF export) → **Similar Cases** panel
-  - Hotspot Map (Leaflet, dark basemap)
-  - **Network Graph**: force-directed graph (d3) of cases and linked persons, with dashed red
-    edges flagging people who share a phone number across different cases
-  - **Case Assistant**: a floating chat button (bottom-right, on every page) instead of a sidebar
-    tab — click to open a compact chat panel
+### 📚 Presentation & Evaluation Documents
+- 🎥 **Presenter Demo Script:** [DEMO_WALKTHROUGH.md](file:///d:/Projects/bihari_datathon/crime-intel-platform/DEMO_WALKTHROUGH.md) (12–15 minute presenter script mapping Storylines A–F to all 10 problem statement pillars)
+- 🏗️ **Technical Architecture:** [ARCHITECTURE.md](file:///d:/Projects/bihari_datathon/crime-intel-platform/ARCHITECTURE.md) (System overview Mermaid diagrams, data models, RAG retrieval pipeline, and deployment topology)
+- ⚖️ **Fairness & Risk Scoring:** [RISK_SCORING.md](file:///d:/Projects/bihari_datathon/crime-intel-platform/RISK_SCORING.md)
+- 🕸️ **Gang Detection Rules:** [GROUP_DETECTION.md](file:///d:/Projects/bihari_datathon/crime-intel-platform/GROUP_DETECTION.md)
 
-## The AI Case Assistant (deep search, not a simple Q&A bot)
-The assistant is built to behave like an investigator's research partner rather than a lookup tool:
-1. **Deep search** (`app/routers/chat.py`): a query is checked for an exact case ID
-   (e.g. `CR-2026-0016`) or a phone number, and those records are pulled in directly and given
-   priority - alongside a broader TF-IDF similarity search (`app/rag.py`) over every case, person,
-   and evidence record. Results are merged and deduplicated.
-2. **Investigator-grade answers** (`app/llm.py`): the system prompt asks the model to explain
-   cases in plain terms, proactively surface connections across cases (shared people, phone
-   numbers, districts, timing), and suggest concrete next investigative steps - not just answer
-   the literal question. Requires an Anthropic API key (see below); without one, it still returns
-   the retrieved case matches with an explicit note that AI generation is unavailable.
-3. **Conversation history** is still saved per session (`chat_sessions` / `chat_messages`) so
-   context isn't lost - the widget keeps its active session in the browser and reuses it across
-   page navigation.
+---
 
-**To enable AI-generated answers**, set an environment variable before starting the backend:
-```bash
-export ANTHROPIC_API_KEY=sk-ant-...
-```
+## 🚀 Problem Statement 10-Pillar Feature Mapping (100% Coverage)
 
-## Network graph logic
-`GET /api/network/graph` returns case nodes, person nodes, `linked_to` edges (person → case), and
-`shared_phone` edges whenever the same phone number appears on persons attached to *different*
-cases - a quick way to surface a possible recurring suspect. The frontend renders this with a
-d3-force simulation (drag to reposition, scroll to zoom, click a node for details).
+| Pillar # | Problem Statement Requirement | CrimeIntel Implemented Feature & Route |
+|---|---|---|
+| **Pillar 1** | Case Management & Search | Multi-attribute filtering, free-text search, paginated cases (`/cases`), and structured KSP FIR details. |
+| **Pillar 2** | AI Case Assistant | **Full-Page AI Research Desk** (`/assistant`) + Floating Widget (`ChatWidget.jsx`), shared session state, deep-search RAG, bilingual (English + Kannada), Web Speech API voice I/O, PDF export, and **Explainable AI Reasoning Steps**. |
+| **Pillar 3** | Hotspot Map | Spatial visualization with Leaflet, dark ops-room basemap, and severity-coded incident markers (`/map`). |
+| **Pillar 4** | Criminal Network Visualization | Force-directed D3 graph (`/network`), recurring phone link edges, and **Organized Crime / Gang Group Detection** (`/api/network/groups`). |
+| **Pillar 5** | Predictive Analytics & Trend Alerts | District incident trend comparison (30-day delta heuristics), high-severity alert feeds on `/dashboard`, and **Seasonal/Event-based trend analysis** on `/insights`. |
+| **Pillar 6** | Audit Trail & RBAC | Role-based access control (`investigator`, `analyst`, `admin`, `viewer`), full action logs (`/audit`), and statutory sensitive field redaction. |
+| **Pillar 7** | Production Hardening | Docker Compose orchestration (Postgres 16 + FastAPI + Nginx), rate limiting via `slowapi`, Admin User Management UI (`/admin`), and CSV bulk case import (`/import`). |
+| **Pillar 8** | Offender Profiling & Risk Scoring | Non-biased behavioral risk scoring (0–100 scale), MO pattern repetition tracking, and offender profile directory (`/offenders`). |
+| **Pillar 9** | Socio-Demographic Crime Insights | Aggregate demographic distributions (age, gender, urban/rural), district socioeconomic correlations, and **Seasonal/Event-based trend charts** (`/insights`). |
+| **Pillar 10** | Financial Crime Linking | Bank account mapping, transaction flow graph (`/finance/trail/{case_id}`), and flagged monetary movement overlays on the network graph. |
 
-## Phase 5 — remaining Key Features
-Added on top of Phase 1-4, matching the feature list in the project brief:
+---
 
-- **Bilingual chatbot (English + Kannada)**: a language toggle (EN / ಕನ್ನಡ) in the chat widget is
-  sent with every message; the backend instructs the model to answer fully in Kannada script when
-  selected, translating case facts rather than leaving them in English.
-- **Voice-enabled interaction**: the mic button uses the browser's Web Speech API
-  (`SpeechRecognition`) for voice input in the selected language, and the speaker icon on each
-  assistant reply uses `speechSynthesis` to read the answer aloud. Works best in Chrome; the app
-  degrades gracefully (a message explains it isn't supported) in browsers without this API.
-- **PDF export of conversation history**: the "PDF" button in the chat widget calls
-  `GET /api/export/chat/{session_id}/report`, which renders the full transcript (investigator
-  questions, assistant answers, and cited sources) as a downloadable PDF via reportlab.
-- **Explainable AI with audit trails**: every chat query now records *why* each case was
-  retrieved — `direct_case_id` (exact case-ID mention), `phone_match` (phone-number lookup), or
-  `similarity` (TF-IDF match) — shown as a label on each source chip in the UI. Every AI query,
-  case creation, and PDF export is also written to `audit_logs`, visible to admins on the new
-  **Audit Trail** page (`/audit`), so any answer or action can be traced back to who asked what
-  and when.
-- Context-aware conversations, criminal network visualization, crime trend/hotspot detection,
-  predictive analytics, and role-based secure access were already covered in Phases 1-4.
+## ⚖️ Non-Biased Risk Scoring Model
 
-## Next steps (beyond the current plan)
-- Move similarity search from TF-IDF to real embeddings + a vector DB (pgvector / Chroma) at scale
-- Switch SQLite → PostgreSQL + PostGIS for production-grade geospatial queries
-- Audit log viewer, sensitive-data masking, encryption at rest
-- Replace the simple 30-day trend heuristic with a proper time-series forecasting model
+Offender risk scores are strictly **behavioral and criminological** (case volume, max severity, recency, MO repetition, and network centrality). 
+**Demographic attributes (age, gender, income, education, area) are strictly excluded from individual risk scoring.**
+For full mathematical formulas and fairness guarantees, see [RISK_SCORING.md](file:///d:/Projects/bihari_datathon/crime-intel-platform/RISK_SCORING.md).
 
-## Run the backend
+---
+
+## 🕸️ Organized Crime & Gang Group Detection
+
+CrimeIntel automatically detects potential criminal syndicates using a multi-vector connected-components clustering algorithm on persons with $\ge 2$ link types (co-accused, shared phone number, or shared financial transfers).
+For full clustering thresholds and group risk formulas, see [GROUP_DETECTION.md](file:///d:/Projects/bihari_datathon/crime-intel-platform/GROUP_DETECTION.md).
+
+---
+
+## 🤖 Full-Page AI Assistant (`/assistant`)
+
+In addition to the floating bottom-right `ChatWidget.jsx`, CrimeIntel features a dedicated 3-column **AI Assistant Desk** at `/assistant`:
+- **Left Column:** Saved Investigative Threads session list & "+ New Conversation" button.
+- **Center Column:** Full-height thread, bilingual language toggle (EN/Kannada), speech-to-text mic, read-aloud toggle, and **"⬇ Export PDF Report"** transcript generator.
+- **Right Column:** Real-time **Execution Reasoning Steps** and **Source Case Citations** with similarity scores and direct links (`[Open Case File ➔]`).
+- **Shared Session State:** Conversations seamlessly synchronize between the floating widget and full page using shared `localStorage` session keying.
+
+---
+
+## 🔒 Statutory Compliance & Sensitive Data Protocol
+
+> **Notice:** `religion_id` and `caste_id` on Complainant records are mandated by the official KSP FIR schema, but are strictly access-restricted in CrimeIntel for anti-discrimination compliance. These fields are:
+> - **Excluded** from AI RAG index, analytics, risk scoring, and network graph computations.
+> - **Masked** as `null` for non-admin roles at the API layer.
+> - **Logged** to `audit_logs` (`action="view_sensitive_complainant_data"`) whenever read by an Admin user.
+
+---
+
+## 📢 Synthetic Demo Data Disclosure
+
+> **Notice:** All socio-demographic statistics, district indicators, bank accounts, financial transactions, and FIR records seeded in this demo environment are **synthetic data** generated exclusively for technical evaluation and policy insight demonstration.
+
+---
+
+## 🛠️ Quick Start (Local Development)
+
+### 1. Backend Setup
 ```bash
 cd backend
-python3 -m venv venv
-source venv/bin/activate        # venv\Scripts\activate on Windows
+python -m venv venv
+venv\Scripts\activate            # source venv/bin/activate on Linux/Mac
 pip install -r requirements.txt
-python seed.py                  # creates admin user + 40 sample cases
+python seed.py                   # Populates connected demo storylines A-F & lookup masters
 uvicorn app.main:app --reload --port 8000
 ```
-Backend runs at `http://localhost:8000`. Interactive API docs: `http://localhost:8000/docs`.
+- API Docs: `http://localhost:8000/docs`
+- Default Credentials:
+  - Admin: `admin@crimeintel.local` / `Admin@123`
+  - Analyst: `analyst@crimeintel.local` / `Analyst@123`
+  - Investigator: `investigator@crimeintel.local` / `Investigator@123`
+  - Viewer: `viewer@crimeintel.local` / `Viewer@123`
 
-Default login: **admin@crimeintel.local / Admin@123**
-
-## Run the frontend
+### 2. Frontend Setup
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
-Frontend runs at `http://localhost:5173` and proxies `/api` calls to the backend.
+- Frontend UI: `http://localhost:5173`
 
-## Next steps (Phase 4, from the plan)
-- Network graph (suspects / phone numbers / locations linked visually)
-- Similar-case suggestions, alerts and predictions
-- Switch SQLite → PostgreSQL + PostGIS, and TF-IDF → real embeddings + a vector DB, for production scale
-- Audit log viewer, sensitive-data masking, encryption at rest
+---
+
+## 🧪 Automated Testing
+
+Run the automated backend test suite (25 unit tests covering auth, RBAC, cases, RAG chat, PDF export, admin CRUD, offender profiling, analytics, financial trails, KSP crime number formatting, sensitive masking, investigation timelines, gang group detection, reasoning steps, and seasonal trends):
+```bash
+cd backend
+python -m pytest tests/ -v
+```
+
+---
+
+## 🐳 Docker Deployment (Production Stack)
+
+Deploy the entire production stack (PostgreSQL 16, FastAPI, Nginx) with Docker Compose:
+```bash
+docker-compose up --build
+```
+- Frontend (Nginx): `http://localhost:80`
+- Backend API: `http://localhost:8000`
+- PostgreSQL: `localhost:5432`

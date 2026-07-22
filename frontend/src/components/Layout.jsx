@@ -7,7 +7,8 @@ const NAV = [
   { to: "/cases", label: "Case Search", code: "02" },
   { to: "/map", label: "Hotspot Map", code: "03" },
   { to: "/network", label: "Network Graph", code: "04" },
-  { to: "/audit", label: "Audit Trail", code: "05" },
+  { to: "/assistant", label: "AI Assistant", code: "05" },
+  { to: "/audit", label: "Audit Trail", code: "06" },
 ];
 
 export default function Layout({ children }) {
@@ -17,6 +18,23 @@ export default function Layout({ children }) {
   function handleLogout() {
     logout();
     navigate("/login");
+  }
+
+  const role = user?.role || "viewer";
+
+  // Build role-specific navigation links
+  const dynamicNav = [];
+  if (role === "admin" || role === "investigator") {
+    dynamicNav.push({ to: "/import", label: "Import Cases", code: "07" });
+  }
+  if (role === "admin" || role === "investigator" || role === "analyst") {
+    dynamicNav.push({ to: "/offenders", label: "Offender Profiles", code: "08" });
+  }
+  if (role === "admin" || role === "analyst") {
+    dynamicNav.push({ to: "/insights", label: "Socio Insights", code: "09" });
+  }
+  if (role === "admin") {
+    dynamicNav.push({ to: "/admin", label: "User Admin", code: "10" });
   }
 
   return (
@@ -34,6 +52,23 @@ export default function Layout({ children }) {
               key={item.to}
               to={item.to}
               end={item.to === "/"}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-5 py-2.5 text-sm transition border-l-2 ${
+                  isActive
+                    ? "border-amber text-ink bg-panel2"
+                    : "border-transparent text-muted hover:text-ink hover:bg-panel2/60"
+                }`
+              }
+            >
+              <span className="font-mono text-xs text-muted">{item.code}</span>
+              {item.label}
+            </NavLink>
+          ))}
+          {/* Dynamic role-gated navigation */}
+          {dynamicNav.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
               className={({ isActive }) =>
                 `flex items-center gap-3 px-5 py-2.5 text-sm transition border-l-2 ${
                   isActive

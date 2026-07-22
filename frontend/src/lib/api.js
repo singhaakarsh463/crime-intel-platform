@@ -92,4 +92,117 @@ export async function fetchAuditLogs(params = {}) {
   return data;
 }
 
+export async function listUsers() {
+  const { data } = await api.get("/admin/users");
+  return data;
+}
+
+export async function createUser(payload) {
+  const { data } = await api.post("/admin/users", payload);
+  return data;
+}
+
+export async function updateUser(userId, payload) {
+  const { data } = await api.patch(`/admin/users/${userId}`, payload);
+  return data;
+}
+
+export async function deactivateUser(userId) {
+  await api.delete(`/admin/users/${userId}`);
+}
+
+export async function importCasesCSV(file) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const { data } = await api.post("/import/cases/csv", formData, {
+    headers: { "Content-Type": "multipart/form-data" },
+  });
+  return data;
+}
+
+export async function fetchOffenders(params = {}) {
+  const { data } = await api.get("/offenders", { params });
+  return data;
+}
+
+export async function fetchOffenderProfile(personId) {
+  const { data } = await api.get(`/offenders/${personId}`);
+  return data;
+}
+
+export async function fetchDemographicInsights() {
+  const { data } = await api.get("/analytics/demographics");
+  return data;
+}
+
+export async function fetchSocioeconomicCorrelation() {
+  const { data } = await api.get("/analytics/socioeconomic-correlation");
+  return data;
+}
+
+export async function fetchFinancialTrail(caseId) {
+  const { data } = await api.get(`/finance/trail/${caseId}`);
+  return data;
+}
+
+export async function fetchFinancialTransactions(params = {}) {
+  const { data } = await api.get("/finance/transactions", { params });
+  return data;
+}
+
+export async function fetchFIRDetails(caseId) {
+  const { data } = await api.get(`/cases/${caseId}/fir-details`);
+  return data;
+}
+
+export async function saveFIRDetails(caseId, payload) {
+  const { data } = await api.post(`/cases/${caseId}/fir-details`, payload);
+  return data;
+}
+
+export async function fetchComplainantDetails(caseId) {
+  const { data } = await api.get(`/cases/${caseId}/complainant`);
+  return data;
+}
+
+export async function saveComplainantDetails(caseId, payload) {
+  const { data } = await api.post(`/cases/${caseId}/complainant`, payload);
+  return data;
+}
+
+export async function fetchArrestSurrenderEvents(caseId) {
+  const { data } = await api.get(`/cases/${caseId}/arrest-surrender`);
+  return data;
+}
+
+export async function fetchActSections(caseId) {
+  const { data } = await api.get(`/cases/${caseId}/act-sections`);
+  return data;
+}
+
+export async function fetchChargesheetDetails(caseId) {
+  const { data } = await api.get(`/cases/${caseId}/chargesheet`);
+  return data;
+}
+
+export async function fetchMasterLookup(type, params = {}) {
+  const { data } = await api.get(`/masters/${type}`, { params });
+  return data;
+}
+
+export async function fetchCaseTimeline(caseId) {
+  const { data } = await api.get(`/cases/${caseId}/timeline`);
+  return data;
+}
+
+export async function fetchNetworkGroups() {
+  const { data } = await api.get("/network/groups");
+  return data;
+}
+
+export async function fetchSeasonalTrends() {
+  const { data } = await api.get("/analytics/seasonal-trends");
+  return data;
+}
+
 export default api;

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   createChatSession, getChatMessages, sendChatMessage, downloadChatTranscript,
 } from "../lib/api.js";
@@ -73,27 +73,54 @@ function SourceChip({ source }) {
 
 function MessageBubble({ msg, onSpeak, speakingId }) {
   const isUser = msg.role === "user";
+  const [showReasoning, setShowReasoning] = useState(false);
   let sources = [];
   try {
     sources = msg.sources ? JSON.parse(msg.sources) : [];
   } catch {
     sources = [];
   }
+  const steps = msg.reasoning_steps || [];
+
   return (
     <div className={`flex ${isUser ? "justify-end" : "justify-start"} mb-3`}>
       <div className={`max-w-[85%] ${isUser ? "bg-amber text-base" : "bg-panel2 border border-line text-ink"} rounded-md px-3 py-2`}>
         <p className="text-[13px] whitespace-pre-wrap leading-relaxed">{msg.content}</p>
         <div className="flex items-center justify-between mt-1.5">
           {!isUser && (
-            <button
-              onClick={() => onSpeak(msg)}
-              className="text-muted hover:text-teal transition flex items-center gap-1"
-              title="Read aloud"
-            >
-              <SpeakerIcon speaking={speakingId === msg.id} />
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => onSpeak(msg)}
+                className="text-muted hover:text-teal transition flex items-center gap-1"
+                title="Read aloud"
+              >
+                <SpeakerIcon speaking={speakingId === msg.id} />
+              </button>
+              {steps.length > 0 && (
+                <button
+                  onClick={() => setShowReasoning(!showReasoning)}
+                  className="text-[11px] font-mono text-teal hover:underline flex items-center gap-1"
+                >
+                  ⚡ {showReasoning ? "Hide Reasoning" : "Show Reasoning"}
+                </button>
+              )}
+            </div>
           )}
         </div>
+
+        {/* Reasoning Steps Panel */}
+        {!isUser && showReasoning && steps.length > 0 && (
+          <div className="mt-2 pt-2 border-t border-line/40 space-y-1.5 text-[11px] font-mono text-muted bg-panel p-2 rounded">
+            <p className="text-teal font-semibold uppercase text-[10px] tracking-wider">AI Reasoning Pipeline</p>
+            {steps.map((st, i) => (
+              <div key={i} className="flex items-start gap-1.5">
+                <span className="text-amber">›</span>
+                <span>{st}</span>
+              </div>
+            ))}
+          </div>
+        )}
+
         {sources.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-line/40">
             {sources.map((s, i) => (
@@ -107,6 +134,7 @@ function MessageBubble({ msg, onSpeak, speakingId }) {
 }
 
 export default function ChatWidget() {
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [sessionId, setSessionId] = useState(() => localStorage.getItem(ACTIVE_SESSION_KEY));
   const [messages, setMessages] = useState([]);
@@ -212,11 +240,15 @@ export default function ChatWidget() {
 
     try {
       const sid = await ensureSession();
-      const result = await sendChatMessage(sid, question, language);
+      const answer = await sendChatMessage(sid, question, language);
+      const asstMsg = {
+        ...answer.assistant_message,
+        reasoning_steps: answer.reasoning_steps || answer.assistant_message.reasoning_steps || [],
+      };
       setMessages((prev) => [
         ...prev.filter((m) => !String(m.id).startsWith("temp-")),
-        result.user_message,
-        result.assistant_message,
+        answer.user_message,
+        asstMsg,
       ]);
     } catch (err) {
       setError("Could not reach the assistant. Is the API running?");
@@ -235,9 +267,21 @@ export default function ChatWidget() {
                 <p className="font-mono text-teal text-[10px] tracking-[0.2em]">DEEP SEARCH · INVESTIGATOR MODE</p>
                 <p className="text-ink font-display text-lg leading-tight">Case Assistant</p>
               </div>
-              <button onClick={() => setOpen(false)} className="text-muted hover:text-crit transition">
-                <CloseIcon />
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setOpen(false);
+                    navigate("/assistant");
+                  }}
+                  className="text-muted hover:text-teal text-xs font-mono transition border border-line px-1.5 py-0.5 rounded flex items-center gap-1"
+                  title="Expand to Full Page"
+                >
+                  Full Page ↗
+                </button>
+                <button onClick={() => setOpen(false)} className="text-muted hover:text-crit transition">
+                  <CloseIcon />
+                </button>
+              </div>
             </div>
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1 bg-panel rounded border border-line p-0.5">

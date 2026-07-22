@@ -1,60 +1,142 @@
 import json
 import re
+from typing import List, Tuple, Dict, Any
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
 from app.database import get_db
 from app import models, schemas, auth, rag, llm
+from app.limiter import limiter, RATE_CHAT
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 CASE_CODE_RE = re.compile(r"\bCR-\d{4}-\d{4}\b", re.IGNORECASE)
 PHONE_RE = re.compile(r"\+?\d[\d\- ]{6,}\d")
+STOP_WORDS = {"in", "of", "the", "a", "an", "for", "and", "or", "to", "cases", "case", "show", "me", "tell", "about", "find", "all", "list", "what", "where", "how"}
+
+SYNONYMS = {
+    "karantka": ["karnataka", "bengaluru"],
+    "karnatka": ["karnataka", "bengaluru"],
+    "karnataka": ["karnataka", "bengaluru"],
+    "bangalore": ["bengaluru"],
+    "bengaluru": ["bengaluru", "karnataka"],
+    "robbery": ["robbery", "burglary", "theft"],
+    "robberies": ["robbery", "burglary", "theft"],
+    "theft": ["theft", "burglary", "robbery"],
+    "murder": ["murder", "assault"],
+    "cyber": ["cyber", "fraud"],
+}
 
 
-def _deep_search(db: Session, query: str, top_k: int = 8):
+def _deep_search(db: Session, query: str, top_k: int = 8) -> Tuple[List[Any], List[str]]:
     """
-    Merge three retrieval strategies for a richer, investigator-grade search:
-    1. TF-IDF similarity over all case text (broad recall)
-    2. Exact case-ID mentions in the query (direct lookup)
-    3. Phone-number mentions in the query (direct person/case lookup)
+    Merge four retrieval strategies for a rich, investigator-grade search:
+    1. Direct case-ID mentions
+    2. Phone-number mentions
+    3. TF-IDF vector similarity search
+    4. Synonym-expanded keyword search & general recall fallback
 
-    Each hit is tagged with a match_type so the UI can show *why* it was
-    retrieved (explainable AI, not a black box).
+    Instruments and records real intermediate execution steps for explainable AI.
     """
+    # Always ensure in-memory index is fresh
+    if not rag._chunks:
+        rag.build_index(db)
+
     seen_chunk_ids = set()
     combined = []
+    reasoning_steps = []
 
-    # 1. Direct case-ID mentions
-    for code in CASE_CODE_RE.findall(query):
-        case = db.query(models.Case).filter(models.Case.case_id.ilike(code)).first()
-        if case:
-            for chunk in rag.get_case_chunks(case.id):
-                if chunk.chunk_id not in seen_chunk_ids:
-                    seen_chunk_ids.add(chunk.chunk_id)
-                    combined.append((chunk, 1.0, "direct_case_id"))
+    # Step 1: Direct case-ID mentions
+    case_codes = CASE_CODE_RE.findall(query)
+    if case_codes:
+        for code in case_codes:
+            case = db.query(models.Case).filter(models.Case.case_id.ilike(code)).first()
+            if case:
+                reasoning_steps.append(f"Detected case ID '{code.upper()}' in query — direct case file lookup")
+                for chunk in rag.get_case_chunks(case.id):
+                    if chunk.chunk_id not in seen_chunk_ids:
+                        seen_chunk_ids.add(chunk.chunk_id)
+                        combined.append((chunk, 1.0, "direct_case_id"))
+            else:
+                reasoning_steps.append(f"Case ID '{code}' mentioned but not found in DB")
+    else:
+        reasoning_steps.append("No explicit case ID detected in query string")
 
-    # 2. Phone-number mentions -> find matching persons, pull in their cases
-    for phone_match in PHONE_RE.findall(query):
+    # Step 2: Phone-number mentions
+    phone_matches = PHONE_RE.findall(query)
+    found_phones = False
+    for phone_match in phone_matches:
         digits = re.sub(r"\D", "", phone_match)
         if len(digits) < 7:
             continue
         persons = db.query(models.Person).filter(models.Person.phone_number.ilike(f"%{digits[-8:]}%")).all()
-        for person in persons:
-            for chunk in rag.get_case_chunks(person.case_id):
+        if persons:
+            found_phones = True
+            reasoning_steps.append(f"Matched phone number '{phone_match.strip()}' to {len(persons)} suspect/person records")
+            for person in persons:
+                for chunk in rag.get_case_chunks(person.case_id):
+                    if chunk.chunk_id not in seen_chunk_ids:
+                        seen_chunk_ids.add(chunk.chunk_id)
+                        combined.append((chunk, 0.95, "phone_match"))
+    if not found_phones and not phone_matches:
+        reasoning_steps.append("No phone numbers identified in query string")
+
+    # Step 3: Broad TF-IDF similarity search
+    tfidf_hits = rag.retrieve(query, top_k=top_k)
+    if tfidf_hits:
+        top_score = round(tfidf_hits[0][1], 3)
+        reasoning_steps.append(f"Retrieved {len(tfidf_hits)} related case chunks via TF-IDF vector similarity (top score: {top_score})")
+        for chunk, score in tfidf_hits:
+            if chunk.chunk_id not in seen_chunk_ids:
+                seen_chunk_ids.add(chunk.chunk_id)
+                combined.append((chunk, score, "similarity"))
+    else:
+        reasoning_steps.append("TF-IDF similarity search yielded 0 matching chunks")
+
+    # Step 4: Synonym-Expanded Keyword Fallback Search
+    if len(combined) < 2:
+        words = [w.lower() for w in re.findall(r"\w+", query) if w.lower() not in STOP_WORDS and len(w) > 2]
+        expanded_words = set(words)
+        for w in words:
+            if w in SYNONYMS:
+                expanded_words.update(SYNONYMS[w])
+
+        if expanded_words:
+            reasoning_steps.append(f"Initiated synonym-expanded search for keywords: {', '.join(list(expanded_words)[:5])}")
+            for term in expanded_words:
+                like_pattern = f"%{term}%"
+                matched_cases = db.query(models.Case).filter(
+                    or_(
+                        models.Case.crime_type.ilike(like_pattern),
+                        models.Case.district.ilike(like_pattern),
+                        models.Case.title.ilike(like_pattern),
+                        models.Case.summary.ilike(like_pattern),
+                        models.Case.station_name.ilike(like_pattern),
+                    )
+                ).limit(5).all()
+
+                for case in matched_cases:
+                    for chunk in rag.get_case_chunks(case.id):
+                        if chunk.chunk_id not in seen_chunk_ids:
+                            seen_chunk_ids.add(chunk.chunk_id)
+                            combined.append((chunk, 0.85, "keyword_match"))
+
+    # Step 5: General Recall Fallback if still empty
+    if len(combined) == 0:
+        reasoning_steps.append("Executing general recall fallback: pulling top active cases for overview context")
+        recent_cases = db.query(models.Case).order_by(models.Case.incident_date.desc()).limit(4).all()
+        for case in recent_cases:
+            for chunk in rag.get_case_chunks(case.id):
                 if chunk.chunk_id not in seen_chunk_ids:
                     seen_chunk_ids.add(chunk.chunk_id)
-                    combined.append((chunk, 0.95, "phone_match"))
-
-    # 3. Broad TF-IDF similarity search
-    for chunk, score in rag.retrieve(query, top_k=top_k):
-        if chunk.chunk_id not in seen_chunk_ids:
-            seen_chunk_ids.add(chunk.chunk_id)
-            combined.append((chunk, score, "similarity"))
+                    combined.append((chunk, 0.5, "general_recall"))
 
     combined.sort(key=lambda x: x[1], reverse=True)
-    return combined[:top_k]
+    results = combined[:top_k]
+    reasoning_steps.append(f"Compiled final RAG context from {len(results)} distinct evidence/case chunks")
+    return results, reasoning_steps
 
 
 @router.post("/reindex")
@@ -100,7 +182,9 @@ def get_messages(
 
 
 @router.post("/sessions/{session_id}/messages", response_model=schemas.ChatAnswer)
+@limiter.limit(RATE_CHAT)
 def send_message(
+    request: Request,
     session_id: str,
     payload: schemas.ChatMessageCreate,
     db: Session = Depends(get_db),
@@ -118,10 +202,9 @@ def send_message(
         session.title = payload.content[:60]
         db.commit()
 
-    # Build/lazily use the RAG index
-    if not rag._chunks:
-        rag.build_index(db)
-    hits = _deep_search(db, payload.content, top_k=8)
+    # Rebuild/lazily ensure RAG index is populated
+    rag.build_index(db)
+    hits, steps = _deep_search(db, payload.content, top_k=8)
 
     sources = [
         {
@@ -140,15 +223,31 @@ def send_message(
             "I couldn't find any case data matching that question. Try rephrasing, "
             "or ask about a specific case ID, district, or crime type."
         )
+        steps.append("Search yielded no matching case context; generated default guidance.")
     else:
         try:
+            steps.append(f"Dispatched query and context to Anthropic API model (Language: {payload.language.upper()})")
             answer_text = llm.generate_answer(
                 payload.content, [s["snippet"] for s in sources], language=payload.language
             )
-        except llm.LLMNotConfigured as e:
-            top_lines = "\n".join(f"- {s['case_code']}: {s['snippet']}" for s in sources)
+            steps.append("Successfully generated investigator response synthesis")
+        except llm.LLMNotConfigured:
+            steps.append("Anthropic API key unconfigured; presenting direct RAG context summary")
+            
+            # Format clean, professional case intelligence summary without raw error brackets
+            seen_codes = set()
+            case_lines = []
+            for s in sources:
+                if s["case_code"] not in seen_codes:
+                    seen_codes.add(s["case_code"])
+                    case_lines.append(f"• **Case {s['case_code']}** ({s['match_type'].replace('_', ' ').title()}): {s['snippet'][:180]}...")
+
+            formatted_list = "\n".join(case_lines)
             answer_text = (
-                f"(AI generation unavailable: {e})\n\nHere are the most relevant cases I found:\n{top_lines}"
+                f"**Retrieved Case Intelligence Summary:**\n\n"
+                f"Found {len(seen_codes)} relevant case records matching your query:\n\n"
+                f"{formatted_list}\n\n"
+                f"*Note: To enable full conversational synthesis, configure ANTHROPIC_API_KEY in the server environment.*"
             )
 
     assistant_msg = models.ChatMessage(
@@ -164,7 +263,16 @@ def send_message(
     db.commit()
     db.refresh(assistant_msg)
 
-    return schemas.ChatAnswer(session_id=session.id, user_message=user_msg, assistant_message=assistant_msg)
+    user_out = schemas.ChatMessageOut.model_validate(user_msg)
+    asst_out = schemas.ChatMessageOut.model_validate(assistant_msg)
+    asst_out.reasoning_steps = steps
+
+    return schemas.ChatAnswer(
+        session_id=session.id,
+        user_message=user_out,
+        assistant_message=asst_out,
+        reasoning_steps=steps,
+    )
 
 
 def _get_owned_session(db: Session, session_id: str, user: models.User) -> models.ChatSession:
