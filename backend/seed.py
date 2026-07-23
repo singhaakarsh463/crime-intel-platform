@@ -601,10 +601,115 @@ for i in range(1, 31):
 db.commit()
 print("--> Seeded 30 Background Noise Cases.")
 
-# ── 10. Rebuild RAG Search Index ─────────────────────────────────────────────
+# ── 10. Seed Sprint 6 Case Collaboration Data (Assignments, Tasks, Comments) ──
+
+case_heist = db.query(models.Case).filter(models.Case.case_id == "CR-2026-0401").first()
+case_phish = db.query(models.Case).filter(models.Case.case_id == "CR-2026-0301").first()
+case_robbery = db.query(models.Case).filter(models.Case.case_id == "CR-2026-0103").first()
+
+if case_heist and investigator_user and analyst_user:
+    # Assignments
+    db.add(models.CaseAssignment(
+        case_id=case_heist.id,
+        assigned_to_user_id=investigator_user.id,
+        assigned_by_user_id=admin_user.id,
+        role_on_case="Lead Investigator",
+        status="active",
+    ))
+    db.add(models.CaseAssignment(
+        case_id=case_heist.id,
+        assigned_to_user_id=analyst_user.id,
+        assigned_by_user_id=admin_user.id,
+        role_on_case="Reviewing Analyst",
+        status="active",
+    ))
+
+    # Tasks
+    db.add(models.CaseTask(
+        case_id=case_heist.id,
+        title="Cross-verify CCTV footage from Commercial Street entrance",
+        description="Review 4K camera feeds from 20:00 to 21:00 on incident night.",
+        assigned_to_user_id=investigator_user.id,
+        created_by_user_id=admin_user.id,
+        due_date=datetime.utcnow() + timedelta(days=2),
+        status="in_progress",
+    ))
+    db.add(models.CaseTask(
+        case_id=case_heist.id,
+        title="Issue formal seizure memo for recovered gold ornaments",
+        description="Prepare evidence inventory for judicial magistrate submission.",
+        assigned_to_user_id=investigator_user.id,
+        created_by_user_id=analyst_user.id,
+        due_date=datetime.utcnow() + timedelta(days=5),
+        status="todo",
+    ))
+    db.add(models.CaseTask(
+        case_id=case_heist.id,
+        title="Submit preliminary forensic report to District Court",
+        description="Ballistics and fingerprint verification documentation.",
+        assigned_to_user_id=analyst_user.id,
+        created_by_user_id=admin_user.id,
+        due_date=datetime.utcnow() - timedelta(days=1),
+        status="done",
+        completed_at=datetime.utcnow() - timedelta(hours=12),
+    ))
+
+    # Comments
+    db.add(models.CaseComment(
+        case_id=case_heist.id,
+        author_user_id=investigator_user.id,
+        content="Initial crime scene inspection complete. Suspects fled on a black getaway bike towards MG Road.",
+    ))
+    db.add(models.CaseComment(
+        case_id=case_heist.id,
+        author_user_id=analyst_user.id,
+        content="Cross-referenced offender directory: MO tags and CCTV height match suspect Ramesh 'Black Hat' Rao.",
+    ))
+
+if case_phish and investigator_user:
+    db.add(models.CaseAssignment(
+        case_id=case_phish.id,
+        assigned_to_user_id=investigator_user.id,
+        assigned_by_user_id=analyst_user.id,
+        role_on_case="Lead Cyber Investigator",
+        status="active",
+    ))
+    db.add(models.CaseTask(
+        case_id=case_phish.id,
+        title="Freeze ICICI Transit Account ACC-9002",
+        description="Dispatch urgent section 91 CrPC notice to ICICI fraud monitoring cell.",
+        assigned_to_user_id=investigator_user.id,
+        created_by_user_id=investigator_user.id,
+        due_date=datetime.utcnow() + timedelta(days=1),
+        status="todo",
+    ))
+    db.add(models.CaseTask(
+        case_id=case_phish.id,
+        title="Request KYC and IP logs for Paytm Mule Wallet ACC-9003",
+        description="Track digital wallet registration IP address and linked mobile SIM.",
+        assigned_to_user_id=investigator_user.id,
+        created_by_user_id=analyst_user.id,
+        due_date=datetime.utcnow() + timedelta(days=3),
+        status="todo",
+    ))
+
+if case_robbery and analyst_user:
+    db.add(models.CaseAssignment(
+        case_id=case_robbery.id,
+        assigned_to_user_id=analyst_user.id,
+        assigned_by_user_id=admin_user.id,
+        role_on_case="Supporting Officer",
+        status="active",
+    ))
+
+db.commit()
+print("--> Seeded Sprint 6 Case Collaboration Data (Assignments, Tasks, Comments).")
+
+# ── 11. Rebuild RAG Search Index ─────────────────────────────────────────────
 
 indexed_count = rag.build_index(db)
 print(f"--> Rebuilt RAG TF-IDF Search Index with {indexed_count} total evidence chunks.")
 
 db.close()
 print("--> CrimeIntel Demo Seed Pipeline Completed Successfully! System ready for live presentation.")
+

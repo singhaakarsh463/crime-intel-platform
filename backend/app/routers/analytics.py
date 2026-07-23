@@ -15,8 +15,10 @@ from sqlalchemy import func
 
 from app.database import get_db
 from app import models, schemas, auth
+from app.websocket import broadcast_notification_to_roles
 
 router = APIRouter(prefix="/api/analytics", tags=["analytics"])
+
 
 
 @router.get("/demographics", response_model=schemas.DemographicsSummaryOut)
@@ -147,3 +149,24 @@ def get_seasonal_trends(
         "weekday_trends": weekday_data,
         "high_context_events": events,
     }
+
+
+
+@router.post("/trigger-trend-alert")
+async def trigger_district_trend_alert(
+    district: str,
+    crime_type: str,
+    spike_pct: float,
+    db: Session = Depends(get_db),
+    current_user: models.User = Depends(auth.require_roles("analyst", "admin")),
+):
+    """Trigger a district predictive trend alert notification to supervisory roles."""
+    await broadcast_notification_to_roles(
+        db=db,
+        roles=[models.RoleEnum.analyst, models.RoleEnum.admin],
+        notification_type="district_trend_alert",
+        title=f"📈 Predictive Alert: {district}",
+        message=f"{spike_pct:.0f}% spike in {crime_type} incidents detected in {district} over past 30 days.",
+    )
+    return {"status": "ok", "message": f"Trend alert dispatched for {district}"}
+

@@ -42,7 +42,29 @@ For full clustering thresholds and group risk formulas, see [GROUP_DETECTION.md]
 
 ---
 
+## ⚡ Real-Time In-App Alerts via WebSocket (Sprint 7)
+
+CrimeIntel delivers instant, multi-device live notifications over WebSockets (`/ws/notifications?token=<JWT>`):
+- **Event Sources:** Automatically triggers persistent alert rows and WebSocket pushes on high-severity case creation (`high`/`critical`), officer case assignment, task assignment, district trend alerts, and gang group detections.
+- **RBAC Scoping & Deduplication:** `viewer` users are restricted from receiving investigation/high-severity alerts. Duplicate alerts are suppressed.
+- **Persistent Storage:** Notifications survive page refreshes and offline periods (`notifications` database table).
+- **Top Navigation Bell Icon & Toast Popups:** App-wide `Header.jsx` with an interactive **Notification Bell**, unread badge pill, dropdown panel with click-to-navigate links, and non-intrusive toast popups.
+
+---
+
+## 🤝 Case Collaboration & Task Tracking (Sprint 6)
+
+
+CrimeIntel enables multi-investigator coordination across case files:
+- **Officer Assignments & Role Gating:** Supervisory roles (`admin`/`analyst`) can assign any officer to a case with specific role titles (e.g. *Lead Investigator*, *Reviewing Analyst*). Investigators can self-claim cases (`assigned_to_user_id == current_user.id`).
+- **Investigative Tasks:** Create and track case to-dos with due dates, assignees, and status transitions (`todo` $\rightarrow$ `in_progress` $\rightarrow$ `done`). Status changes write entries to `audit_logs`.
+- **Threaded Case Comments:** Chronological investigator discussion feed on `CaseDetail.jsx`.
+- **"My Work" Officer Workspace (`/my-work`):** Dedicated page listing active case assignments and open tasks assigned to the logged-in officer across all cases, accompanied by a live task count badge pill in the navigation sidebar (`"06 · My Work"`).
+
+---
+
 ## 🤖 Full-Page AI Assistant (`/assistant`)
+
 
 In addition to the floating bottom-right `ChatWidget.jsx`, CrimeIntel features a dedicated 3-column **AI Assistant Desk** at `/assistant`:
 - **Left Column:** Saved Investigative Threads session list & "+ New Conversation" button.

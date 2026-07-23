@@ -233,8 +233,11 @@ def similar_cases(
     return results
 
 
+from app.websocket import broadcast_notification_to_roles
+
+
 @router.post("", response_model=schemas.CaseOut)
-def create_case(
+async def create_case(
     payload: schemas.CaseCreate,
     db: Session = Depends(get_db),
     current_user: models.User = Depends(auth.require_roles("investigator", "admin")),
@@ -254,4 +257,17 @@ def create_case(
 
     rag.build_index(db)
 
+    # Sprint 7: High-severity case notification dispatch
+    if case.severity in (models.Severity.high, models.Severity.critical):
+        await broadcast_notification_to_roles(
+            db=db,
+            roles=[models.RoleEnum.investigator, models.RoleEnum.analyst, models.RoleEnum.admin],
+            notification_type="high_severity_case",
+            title=f"🚨 High Severity Incident Logged: {case.case_id}",
+            message=f"New {case.severity.value.upper()} severity incident '{case.title}' reported in {case.district} ({case.station_name}).",
+            related_case_id=case.id,
+            exclude_user_id=current_user.id,
+        )
+
     return case
+

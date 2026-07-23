@@ -30,6 +30,11 @@ export function getCurrentUser() {
   return raw ? JSON.parse(raw) : null;
 }
 
+export function getToken() {
+  return localStorage.getItem("ci_token");
+}
+
+
 export async function fetchDashboardStats() {
   const { data } = await api.get("/dashboard/stats");
   return data;
@@ -205,4 +210,73 @@ export async function fetchSeasonalTrends() {
   return data;
 }
 
+// ── Sprint 6: Collaboration & My Work APIs ───────────────────────────────────
+
+export async function fetchCaseComments(caseId) {
+  const { data } = await api.get(`/cases/${caseId}/comments`);
+  return data;
+}
+
+export async function createCaseComment(caseId, payload) {
+  const { data } = await api.post(`/cases/${caseId}/comments`, payload);
+  return data;
+}
+
+export async function deleteCaseComment(caseId, commentId) {
+  const { data } = await api.delete(`/cases/${caseId}/comments/${commentId}`);
+  return data;
+}
+
+export async function fetchCaseAssignments(caseId) {
+  const { data } = await api.get(`/cases/${caseId}/assignments`);
+  return data;
+}
+
+export async function createCaseAssignment(caseId, payload) {
+  const { data } = await api.post(`/cases/${caseId}/assignments`, payload);
+  return data;
+}
+
+export async function removeCaseAssignment(caseId, assignmentId) {
+  const { data } = await api.delete(`/cases/${caseId}/assignments/${assignmentId}`);
+  return data;
+}
+
+export async function fetchCaseTasks(caseId) {
+  const { data } = await api.get(`/cases/${caseId}/tasks`);
+  return data;
+}
+
+export async function createCaseTask(caseId, payload) {
+  const { data } = await api.post(`/cases/${caseId}/tasks`, payload);
+  return data;
+}
+
+export async function updateCaseTask(caseId, taskId, payload) {
+  const { data } = await api.patch(`/cases/${caseId}/tasks/${taskId}`, payload);
+  return data;
+}
+
+export async function deleteCaseTask(caseId, taskId) {
+  const { data } = await api.delete(`/cases/${caseId}/tasks/${taskId}`);
+  return data;
+}
+
+export async function fetchMyTasks() {
+  const { data } = await api.get("/me/tasks");
+  return data;
+}
+
+export async function fetchMyAssignedCases() {
+  const { data } = await api.get("/me/assigned-cases");
+  return data;
+}
+
+export async function fetchOfficers() {
+  const { data } = await api.get("/users/officers");
+  return data;
+}
+
 export default api;
+
+

@@ -212,6 +212,24 @@ class User(Base):
 
     employee = relationship("EmployeeMaster")
     chat_sessions = relationship("ChatSession", back_populates="user")
+    notifications = relationship("Notification", back_populates="user")
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    user_id = Column(String, ForeignKey("users.id"), nullable=False, index=True)
+    type = Column(String, nullable=False)  # high_severity_case, case_assigned, task_assigned, district_trend_alert, group_detected
+    title = Column(String, nullable=False)
+    message = Column(Text, nullable=False)
+    related_case_id = Column(String, ForeignKey("cases.id"), nullable=True)
+    is_read = Column(Boolean, default=False, nullable=False, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+
+    user = relationship("User", back_populates="notifications")
+    related_case = relationship("Case")
+
 
 
 class Case(Base):
@@ -242,6 +260,11 @@ class Case(Base):
     arrest_events = relationship("ArrestSurrender", back_populates="case")
     act_sections = relationship("ActSectionAssociation", back_populates="case")
     chargesheet = relationship("ChargesheetDetails", uselist=False, back_populates="case")
+
+    # Sprint 6 Case Collaboration extensions
+    comments = relationship("CaseComment", back_populates="case", cascade="all, delete-orphan")
+    assignments = relationship("CaseAssignment", back_populates="case", cascade="all, delete-orphan")
+    tasks = relationship("CaseTask", back_populates="case", cascade="all, delete-orphan")
 
 
 class CaseFIRDetails(Base):
@@ -479,3 +502,54 @@ class AuditLog(Base):
     action = Column(String, nullable=False)
     detail = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+# ─── SPRINT 6: CASE COLLABORATION MODELS ─────────────────────────────────────
+
+class CaseComment(Base):
+    __tablename__ = "case_comments"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    case_id = Column(String, ForeignKey("cases.id"), nullable=False)
+    author_user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    content = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=True, onupdate=datetime.utcnow)
+
+    case = relationship("Case", back_populates="comments")
+    author = relationship("User")
+
+
+class CaseAssignment(Base):
+    __tablename__ = "case_assignments"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    case_id = Column(String, ForeignKey("cases.id"), nullable=False)
+    assigned_to_user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    assigned_by_user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    role_on_case = Column(String, nullable=False, default="Supporting Officer")
+    assigned_at = Column(DateTime, default=datetime.utcnow)
+    status = Column(String, default="active", nullable=False)  # active / removed
+
+    case = relationship("Case", back_populates="assignments")
+    assigned_to = relationship("User", foreign_keys=[assigned_to_user_id])
+    assigned_by = relationship("User", foreign_keys=[assigned_by_user_id])
+
+
+class CaseTask(Base):
+    __tablename__ = "case_tasks"
+
+    id = Column(String, primary_key=True, default=gen_id)
+    case_id = Column(String, ForeignKey("cases.id"), nullable=False)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=True)
+    assigned_to_user_id = Column(String, ForeignKey("users.id"), nullable=True)
+    created_by_user_id = Column(String, ForeignKey("users.id"), nullable=False)
+    due_date = Column(DateTime, nullable=True)
+    status = Column(String, default="todo", nullable=False)  # todo / in_progress / done
+    created_at = Column(DateTime, default=datetime.utcnow)
+    completed_at = Column(DateTime, nullable=True)
+
+    case = relationship("Case", back_populates="tasks")
+    assigned_to = relationship("User", foreign_keys=[assigned_to_user_id])
+    created_by = relationship("User", foreign_keys=[created_by_user_id])

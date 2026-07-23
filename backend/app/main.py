@@ -7,7 +7,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app.database import Base, engine, SessionLocal
-from app.routers import auth, cases, dashboard, export, chat, network, audit, offenders, analytics, finance, masters, fir
+from app.routers import auth, cases, dashboard, export, chat, network, audit, offenders, analytics, finance, masters, fir, collaboration, notifications
 from app.routers import admin as admin_router
 from app.routers import import_csv
 from app import rag
@@ -60,6 +60,10 @@ app.include_router(analytics.router)
 app.include_router(finance.router)
 app.include_router(masters.router)
 app.include_router(fir.router)
+app.include_router(collaboration.router)
+app.include_router(notifications.router)
+
+
 
 
 @app.get("/api/health")

@@ -636,3 +636,111 @@ class ChargesheetDetailsOut(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# ─── SPRINT 6: CASE COLLABORATION SCHEMAS ─────────────────────────────────────
+
+class CommentCreate(BaseModel):
+    content: str
+
+
+class CommentUpdate(BaseModel):
+    content: str
+
+
+class CommentOut(BaseModel):
+    id: str
+    case_id: str
+    author_user_id: str
+    author_name: Optional[str] = None
+    author_role: Optional[str] = None
+    content: str
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AssignmentCreate(BaseModel):
+    assigned_to_user_id: str
+    role_on_case: str = "Supporting Officer"
+
+
+class AssignmentUpdate(BaseModel):
+    role_on_case: Optional[str] = None
+    status: Optional[str] = None  # active / removed
+
+
+class AssignmentOut(BaseModel):
+    id: str
+    case_id: str
+    assigned_to_user_id: str
+    assigned_to_name: Optional[str] = None
+    assigned_to_email: Optional[str] = None
+    assigned_by_user_id: str
+    assigned_by_name: Optional[str] = None
+    role_on_case: str
+    assigned_at: datetime
+    status: str
+
+    class Config:
+        from_attributes = True
+
+
+class TaskCreate(BaseModel):
+    title: str
+    description: Optional[str] = None
+    assigned_to_user_id: Optional[str] = None
+    due_date: Optional[datetime] = None
+
+
+class TaskUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    assigned_to_user_id: Optional[str] = None
+    due_date: Optional[datetime] = None
+    status: Optional[str] = None  # todo / in_progress / done
+
+
+class TaskOut(BaseModel):
+    id: str
+    case_id: str
+    case_code: Optional[str] = None
+    case_title: Optional[str] = None
+    case_severity: Optional[str] = None
+    title: str
+    description: Optional[str] = None
+    assigned_to_user_id: Optional[str] = None
+    assigned_to_name: Optional[str] = None
+    created_by_user_id: str
+    created_by_name: Optional[str] = None
+    due_date: Optional[datetime] = None
+    status: str
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+
+    class Config:
+        from_attributes = True
+
+
+# ── Sprint 7: Notification Schemas ──────────────────────────────────────────
+
+class NotificationOut(BaseModel):
+    id: str
+    user_id: str
+    type: str
+    title: str
+    message: str
+    related_case_id: Optional[str] = None
+    is_read: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class NotificationUnreadCountOut(BaseModel):
+    unread_count: int
+
+
